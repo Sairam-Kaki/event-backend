@@ -91,18 +91,19 @@ app.post('/register', async (req, res) => {
 
 // Create JWT token
 async function createUserToken(email: any) {
-    const token = await jwt.sign({ email }, 'Secret-Key', { expiresIn: '1h' })
+    const token = jwt.sign({ email }, 'user-key', { expiresIn: '1h' })
     return token
 }
 
 async function createAdminToken(email: any) {
-    const token = await jwt.sign({ email }, 'Secret-Key', { expiresIn: '1h' })
+    const token = await jwt.sign({ email }, 'admin-key', { expiresIn: '1h' })
     return token
 }
 
 // Connection to login page
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
+
     try {
         // const result = await getUserData(email);
         const query = `
@@ -118,18 +119,16 @@ app.post('/login', async (req, res) => {
         // Checking if the password is correct
         const user = result.rows[0];
         const passwordMatch = password === user.password;
-        const isAdmin = user.isadmin;
         if (!passwordMatch) {
             return res.status(401).send('Invalid credentials');
         }
 
-
+        const isAdmin = user.isadmin;
+        console.log("isAdmin: ", isAdmin)
         // Generating a JWT token for authenticated user
         // const token = jwt.sign({ userId: user.id }, 'tenny');
-        const token = await createUserToken(user.email);
-        console.log(user.email);
-        console.log(token);
-
+        const token = isAdmin ? await createAdminToken(user.email) : await createUserToken(user.email);
+        console.log("Token: ", token);
         return res.status(200).json({ message: isAdmin ? "adminLogin" : "login", token })
 
     } catch (error) {
@@ -143,7 +142,7 @@ app.post('/login', async (req, res) => {
 app.get('/dashboard', (req, res) => {
     const token = req.headers.authorization;
     if (token) {
-        jwt.verify(token, 'Secret-Key', async (err, data: any) => {
+        jwt.verify(token, 'user-key', async (err, data: any) => {
 
             if (err) {
                 res.status(200).json({ message: "TokenExpiredError" })
@@ -152,9 +151,7 @@ app.get('/dashboard', (req, res) => {
                 const query = `
                     SELECT * FROM users WHERE email ='${data.email}';
                 `;
-                console.log(query)
                 const result = await pool.query(query);
-                console.log("list must", result.rows[0])
                 res.status(200).json({ message: "user deatils are sent", userData: result.rows[0] })
             }
         })
@@ -164,7 +161,32 @@ app.get('/dashboard', (req, res) => {
     }
 })
 
+// For admin dashboard
+app.get('/admindashboard', (req, res) => {
+    const token = req.headers.authorization;
+    if (token) {
+        jwt.verify(token, 'admin-key', async (err, data: any) => {
+
+            if (err) {
+                res.status(200).json({ message: "TokenExpiredError" })
+            }
+            else if (data.email) {
+                const query = `
+                    SELECT * FROM users WHERE email ='${data.email}';
+                `;
+                const result = await pool.query(query);
+                res.status(200).json({ message: "admin deatils are sent", userData: result.rows[0] })
+            }
+        })
+    }
+    else {
+        res.status(200).json({ message: "token not found" })
+    }
+})
+
+
 app.post('/admin', async (req, res) => {
+    
     const {
         eventTitle,
         location,
@@ -183,6 +205,7 @@ app.post('/admin', async (req, res) => {
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             `
+            
         const result = await pool.query(query, [
             eventTitle,
             startDate,
@@ -194,7 +217,8 @@ app.post('/admin', async (req, res) => {
             type,
             description
         ]);
-        console.log("Events inserted successfully");
+        console.log(result)
+
         res.status(201).send("Event Created Successfully");
     } catch (error) {
         console.log('Error creating the event: ', error);
@@ -209,7 +233,6 @@ app.get('/event', async (req, res) => {
                     SELECT * FROM events;
                 `;
     const result = await pool.query(query);
-    console.log('result.rows[0]: ', result.rows)
     res.status(200).json({ message: "events details are sent", eventData: result.rows })
 })
 
@@ -217,3 +240,4 @@ app.get('/event', async (req, res) => {
 app.listen(8080, () => {
     console.log('Server is running on port 8080');
 });
+
