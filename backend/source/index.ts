@@ -80,17 +80,22 @@ app.post('/register', async (req, res) => {
     }
 });
 
-async function getUserData(email: any) {
-    const query = `
-        SELECT * FROM users WHERE email = $1;
-    `;
-    const result = await pool.query(query, [email]); // Taking users data from db
-    return result;
-}
+// async function getUserData(email: any) {
+//     const query = `
+//         SELECT * FROM users WHERE email = $1;
+//     `;
+//     const result = await pool.query(query, [email]); // Taking users data from db
+//     return result;
+// }
 
 
 // Create JWT token
-async function createJwtToken(email: any) {
+async function createUserToken(email: any) {
+    const token = await jwt.sign({ email }, 'Secret-Key', { expiresIn: '1h' })
+    return token
+}
+
+async function createAdminToken(email: any) {
     const token = await jwt.sign({ email }, 'Secret-Key', { expiresIn: '1h' })
     return token
 }
@@ -113,18 +118,19 @@ app.post('/login', async (req, res) => {
         // Checking if the password is correct
         const user = result.rows[0];
         const passwordMatch = password === user.password;
-
+        const isAdmin = user.isadmin;
         if (!passwordMatch) {
             return res.status(401).send('Invalid credentials');
         }
 
+
         // Generating a JWT token for authenticated user
         // const token = jwt.sign({ userId: user.id }, 'tenny');
-        const token = await createJwtToken(user.email);
+        const token = await createUserToken(user.email);
         console.log(user.email);
         console.log(token);
 
-        return res.status(200).json({ token });
+        return res.status(200).json({ message: isAdmin ? "adminLogin" : "login", token })
 
     } catch (error) {
         console.error('Error logging in:', error);
@@ -148,7 +154,7 @@ app.get('/dashboard', (req, res) => {
                 `;
                 console.log(query)
                 const result = await pool.query(query);
-                console.log( "list must",result.rows[0])
+                console.log("list must", result.rows[0])
                 res.status(200).json({ message: "user deatils are sent", userData: result.rows[0] })
             }
         })
@@ -158,14 +164,53 @@ app.get('/dashboard', (req, res) => {
     }
 })
 
+app.post('/admin', async (req, res) => {
+    const {
+        eventTitle,
+        location,
+        description,
+        type,
+        startDate,
+        endDate,
+        startTime,
+        endTime,
+        price
+    } = req.body;
+    try {
+        const query = `
+            INSERT INTO events (
+                eventname, startdate, enddate, starttime, endtime, location, price, type, description
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            `
+        const result = await pool.query(query, [
+            eventTitle,
+            startDate,
+            endDate,
+            startTime,
+            endTime,
+            location,
+            price,
+            type,
+            description
+        ]);
+        console.log("Events inserted successfully");
+        res.status(201).send("Event Created Successfully");
+    } catch (error) {
+        console.log('Error creating the event: ', error);
+        res.status(500).send('An error occurred during event creation');
+    }
+
+});
+
 
 app.get('/event', async (req, res) => {
     const query = `
                     SELECT * FROM events;
                 `;
-        const result = await pool.query(query);
-        console.log('result.rows[0]: ', result.rows)
-        res.status(200).json({ message: "events details are sent", eventData: result.rows })
+    const result = await pool.query(query);
+    console.log('result.rows[0]: ', result.rows)
+    res.status(200).json({ message: "events details are sent", eventData: result.rows })
 })
 
 // Assigning a port to run the server
