@@ -15,14 +15,15 @@ router.post('/admin', async (req: Request, res: Response) => {
             endDate,
             startTime,
             endTime,
-            price
+            price,
+            tickets
         } = req.body;
 
         const query = `
                 INSERT INTO events (
-                    eventname, startdate, enddate, starttime, endtime, location, price, type, description
+                    eventname, startdate, enddate, starttime, endtime, location, price, type, description, availability
                     )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
                 `
 
         const result = await pool.query(query, [
@@ -34,7 +35,8 @@ router.post('/admin', async (req: Request, res: Response) => {
             location,
             price,
             type,
-            description
+            description,
+            tickets
         ]);
         console.log(result)
 
@@ -62,21 +64,24 @@ router.get('/event', async (req: Request, res: Response) => {
 
 router.post('/bookTicket', async (req: Request, res: Response) => {
     try {
-        const { token, eventId } = req.body;
+        const { token, eventId, availTickets } = req.body;
         console.log("before verify")
         jwt.verify(token, 'user-key', async (err: any, data: any) => {
-            console.log("after verify")
-
             if (err) {
                 res.status(200).json({ message: "TokenExpiredError" })
             }
+
             else if (data.email) {
+                if(parseInt(availTickets) - 1 <= 0){
+                res.status(202).json({ message: "Tickets are unavailable" })
+
+                }
                 const query = `
                 INSERT INTO tickets(email, event_id, booked_date)
                     VALUES ($1, $2, $3)
                 `
                 const result = await pool.query(query, [data.email, eventId, new Date()]);
-                console.log("ticket result: ", result)
+
                 const query2 = `
                 UPDATE events
                 SET availability = availability - 1
@@ -84,7 +89,6 @@ router.post('/bookTicket', async (req: Request, res: Response) => {
             `
                 const result2 = await pool.query(query2, [eventId])
                 res.status(201).json({ message: "Ticket booked successfully" })
-                console.log("result2: ", result2)
             }
         })
     } catch (error) {
